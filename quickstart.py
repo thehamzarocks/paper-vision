@@ -144,6 +144,7 @@ def main():
         raise ValueError("You need to pass in the folder name in which to run recognition.")
     folder_id = get_folder_id(sys.argv[1])
     images_in_folder = get_images_in_folder(folder_id)
+    images_in_folder.sort(key=lambda image: image['name'])
     download_images(folder_id, images_in_folder)
     run_detection(folder_id, images_in_folder)
 
