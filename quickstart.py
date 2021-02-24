@@ -9,6 +9,7 @@ from googleapiclient.http import MediaIoBaseDownload
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.cloud import vision
+from autocorrect import Speller
 
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = [
@@ -16,6 +17,7 @@ SCOPES = [
 ]
 
 service = None
+spell = Speller()
 
 def initialize():
     creds = None
@@ -116,7 +118,7 @@ def detect_document(folder_id, image_name):
             'https://cloud.google.com/apis/design/errors'.format(
                 response.error.message))
     
-    image_text = response.full_text_annotation.text
+    image_text = spell(response.full_text_annotation.text)
     print(image_text)
     return image_text
 
