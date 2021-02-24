@@ -17,7 +17,7 @@ SCOPES = [
 ]
 
 service = None
-spell = Speller()
+spell = Speller(only_replacements=True)
 
 def initialize():
     creds = None
@@ -121,6 +121,7 @@ def detect_document(folder_id, image_name):
     image_text = spell(response.full_text_annotation.text)
     print(image_text)
     return image_text
+    
 
 def run_detection(folder_id, images_in_folder):
     complete_text = ""
