@@ -4,6 +4,7 @@ import os
 import io
 import shutil
 import sys
+import json
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -70,7 +71,7 @@ def get_images_in_folder(folder_id):
     
     return items
 
-def download_image(folder_id, image_id, image_name):
+def download_image(folder_name, image_id, image_name):
     request = service.files().get_media(fileId=image_id)
     fh = io.BytesIO()
     downloader = MediaIoBaseDownload(fh, request)
@@ -79,16 +80,16 @@ def download_image(folder_id, image_id, image_name):
         status, done = downloader.next_chunk()
     
     fh.seek(0)
-    with open(f"./{folder_id}/{image_name}", "wb") as f:
+    with open(f"./{folder_name}/{image_name}", "wb") as f:
         shutil.copyfileobj(fh, f)
     print(f"Finished downloading file {image_name}")
 
 
-def download_images(folder_id, images_in_folder):
-    print(f"Creating folder: {folder_id}")
-    os.mkdir(f"./{folder_id}")
+def download_images(folder_name, images_in_folder):
+    print(f"Creating folder: {folder_name}")
+    os.mkdir(f"./{folder_name}")
     for image in images_in_folder:
-        download_image(folder_id, image['id'], image['name'])
+        download_image(folder_name, image['id'], image['name'])
 
 
 def create_folder(folder_name):
@@ -102,11 +103,11 @@ def create_folder(folder_name):
     print ('Folder ID: %s' % file.get('id'))
 
 
-def detect_document(folder_id, image_name):
+def detect_document(folder_name, image_name):
     """Detects document features in an image."""
     client = vision.ImageAnnotatorClient()
 
-    with io.open(f"./{folder_id}/{image_name}", 'rb') as image_file:
+    with io.open(f"./{folder_name}/{image_name}", 'rb') as image_file:
         content = image_file.read()
 
     image = vision.Image(content=content)
@@ -123,11 +124,11 @@ def detect_document(folder_id, image_name):
     return image_text
     
 
-def run_detection(folder_id, images_in_folder):
+def run_detection(folder_name, images_in_folder):
     complete_text = ""
     image_to_text_mappings = []
     for image in images_in_folder:
-        image_text = detect_document(folder_id, image['name'])
+        image_text = detect_document(folder_name, image['name'])
         image_to_text_mappings.append({
             'image_name': image['name'],
             'image_id': image['id'],
@@ -136,17 +137,28 @@ def run_detection(folder_id, images_in_folder):
     complete_text = ''.join([image_mapping['image_text'] for image_mapping in image_to_text_mappings])
     print("Finished Recognition")
     print(complete_text)
+    return {
+        'folder': folder_name,
+        'complete_text': complete_text,
+        'image_to_text_mappings': image_to_text_mappings
+    }
+
+def save_image_text_data(folder_name, image_text_data):
+    with open(f"./{folder_name}/image_text_data.json", "w") as f:
+        f.write(json.dumps(image_text_data))
 
 
 def main():
     initialize()
     if(len(sys.argv) != 2):
         raise ValueError("You need to pass in the folder name in which to run recognition.")
-    folder_id = get_folder_id(sys.argv[1])
+    folder_name = sys.argv[1]
+    folder_id = get_folder_id(folder_name)
     images_in_folder = get_images_in_folder(folder_id)
     images_in_folder.sort(key=lambda image: image['name'])
-    download_images(folder_id, images_in_folder)
-    run_detection(folder_id, images_in_folder)
+    download_images(folder_name, images_in_folder)
+    image_text_data = run_detection(folder_name, images_in_folder)
+    save_image_text_data(folder_name, image_text_data)
 
 if __name__ == '__main__':
     main()
