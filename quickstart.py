@@ -6,7 +6,8 @@ import shutil
 import sys
 import json
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
+from mimetypes import MimeTypes 
+from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.cloud import vision
@@ -120,7 +121,6 @@ def detect_document(folder_name, image_name):
                 response.error.message))
     
     image_text = spell(response.full_text_annotation.text)
-    print(image_text)
     return image_text
     
 
@@ -143,9 +143,23 @@ def run_detection(folder_name, images_in_folder):
         'image_to_text_mappings': image_to_text_mappings
     }
 
-def save_image_text_data(folder_name, image_text_data):
-    with open(f"./{folder_name}/image_text_data.json", "w") as f:
+def save_image_text_data(folder_id, folder_name, image_text_data):
+    print(f"Writing image text data for {folder_name}")
+    file_path = f"./{folder_name}/image_text_data.json"
+    with open(file_path, "w") as f:
         f.write(json.dumps(image_text_data))
+    print(f"Uploading image text data for {folder_name} to Drive")
+    name = file_path.split('/')[-1] 
+    mimetype = MimeTypes().guess_type(name)[0] 
+    file_metadata = {
+        'name': name,
+        'parents': [folder_id]
+    }
+    media = MediaFileUpload(file_path, mimetype=mimetype)
+    file = service.files().create(
+                body=file_metadata, media_body=media, fields='id').execute()
+    print("File uploaded to Drive")
+
 
 
 def main():
@@ -158,7 +172,7 @@ def main():
     images_in_folder.sort(key=lambda image: image['name'])
     download_images(folder_name, images_in_folder)
     image_text_data = run_detection(folder_name, images_in_folder)
-    save_image_text_data(folder_name, image_text_data)
+    save_image_text_data(folder_id, folder_name, image_text_data)
 
 if __name__ == '__main__':
     main()
