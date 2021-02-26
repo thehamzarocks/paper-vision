@@ -125,6 +125,7 @@ def detect_document(folder_name, image_name):
     
 
 def run_detection(folder_name, images_in_folder):
+    print("Running Recognition, please wait...")
     complete_text = ""
     image_to_text_mappings = []
     for image in images_in_folder:
@@ -138,6 +139,8 @@ def run_detection(folder_name, images_in_folder):
     print("Finished Recognition")
     print(complete_text)
     return {
+        'type': 'image_to_text_mappings',
+        'version': 1,
         'folder': folder_name,
         'complete_text': complete_text,
         'image_to_text_mappings': image_to_text_mappings
@@ -145,12 +148,12 @@ def run_detection(folder_name, images_in_folder):
 
 def save_image_text_data(folder_id, folder_name, image_text_data):
     print(f"Writing image text data for {folder_name}")
-    file_path = f"./{folder_name}/image_text_data.json"
+    file_path = f"./{folder_name}/{folder_name}.image_text_data.json"
     with open(file_path, "w") as f:
         f.write(json.dumps(image_text_data))
     print(f"Uploading image text data for {folder_name} to Drive")
-    name = file_path.split('/')[-1] 
-    mimetype = MimeTypes().guess_type(name)[0] 
+    name = file_path.split('/')[-1]
+    mimetype = MimeTypes().guess_type(name)[0]
     file_metadata = {
         'name': name,
         'parents': [folder_id]
@@ -160,19 +163,102 @@ def save_image_text_data(folder_id, folder_name, image_text_data):
                 body=file_metadata, media_body=media, fields='id').execute()
     print("File uploaded to Drive")
 
-
-
-def main():
-    initialize()
-    if(len(sys.argv) != 2):
-        raise ValueError("You need to pass in the folder name in which to run recognition.")
-    folder_name = sys.argv[1]
+def run_recognition_command(folder_name):
     folder_id = get_folder_id(folder_name)
     images_in_folder = get_images_in_folder(folder_id)
     images_in_folder.sort(key=lambda image: image['name'])
     download_images(folder_name, images_in_folder)
     image_text_data = run_detection(folder_name, images_in_folder)
     save_image_text_data(folder_id, folder_name, image_text_data)
+
+
+def get_image_text_data_files():
+    results = service.files().list(
+        q=f"name contains 'image_text_data.json'",
+        fields="nextPageToken, files(id, name)").execute()
+    items = results.get('files', [])
+
+    if not items:
+        print("No image text data found, try running recognition on your image folders first")
+    else:
+        print('Image text data:')
+        for item in items:
+            print(u'{0} ({1})'.format(item['name'], item['id']))
+    return items
+
+def download_image_text_data_file(id, name):
+    request = service.files().get_media(fileId=id)
+    fh = io.BytesIO()
+    downloader = MediaIoBaseDownload(fh, request)
+    done = False
+    while done is False:
+        status, done = downloader.next_chunk()
+    
+    fh.seek(0)
+    with open(f"./image_text_data/{name}", "wb") as f:
+        shutil.copyfileobj(fh, f)
+    print(f"Finished downloading file {name}")
+
+
+def download_image_text_data_files(image_text_data_list):
+    os.mkdir(f"./image_text_data")
+    for image_text_data_file in image_text_data_list:
+        download_image_text_data_file(image_text_data_file['id'], image_text_data_file['name'])
+
+def get_mappings(image_text_data_files_list):
+    print("Searching files for match")
+    mappings = []
+    for data_file in image_text_data_files_list:
+        file_name = data_file['name']
+        file_path = f"./image_text_data/{file_name}"
+        with open(file_path, "r") as f:
+            mappings.append(json.loads(f.read()))
+    return mappings
+
+def search_in_mappings(mappings, query):
+    for mapping in mappings:
+        complete_text = mapping['complete_text']
+        index = complete_text.find(query)
+        if(index == -1):
+            continue
+        print(f"Found in {mapping['folder']}")
+    
+
+
+def run_search_command(query):
+    print("Running search")
+    image_text_data_files_list = get_image_text_data_files()
+    download_image_text_data_files(image_text_data_files_list)
+    mappings = get_mappings(image_text_data_files_list)
+    search_in_mappings(mappings, query)
+
+
+
+
+
+
+def main():
+    initialize()
+    if(len(sys.argv) < 2):
+        raise ValueError("You need to pass in the command: r - recognize, s - search")
+
+    command = sys.argv[1]
+    if(len(sys.argv) < 3):
+        if (command == 'r'):
+            raise ValueError("You need to specify the folder name on which to run recognition")
+        if (command == 's'):
+            raise ValueError("You need to specify the search query")
+        else:
+            raise ValueError("You need to specify a command and its parameter")
+    param = sys.argv[2]
+    if(command == 'r'):
+        folder_name = param
+        run_recognition_command(folder_name)
+    elif(command == 's'):
+        query = param
+        run_search_command(query)
+    else:
+        raise ValueError(f"Unrecognized command: {command}")
 
 if __name__ == '__main__':
     main()
